@@ -10,8 +10,8 @@ export function registerViews(map) {
 
 export function navigate(tab, sub = null, param = null) {
   Object.assign(route, { tab, sub, param });
-  window.scrollTo(0, 0);
   render();
+  document.getElementById("view").scrollTop = 0;
 }
 
 export function render() {

@@ -14,7 +14,7 @@ const roundHalf = (n) => Math.round(n * 2) / 2;
 
 export function renderSettings(view) {
   const st = state.settings;
-  const autoNext = nextWorkout(state.sessions, { ...st, nextOverride: null });
+  const next = nextWorkout(state.sessions, st);
 
   view.innerHTML = `
     <h1>Settings</h1>
@@ -29,11 +29,11 @@ export function renderSettings(view) {
           <option value="kg" ${st.units === "kg" ? "selected" : ""}>Kilograms (kg)</option>
         </select></label>
       <label class="choice"><input type="checkbox" id="sounds" ${st.sounds ? "checked" : ""}> Sounds</label>
-      <label class="field"><span>Next workout</span>
+      <label class="field"><span>Where you are in the rotation</span>
         <select id="next">
-          <option value="">Follow the rotation (${esc(autoNext.name)})</option>
-          ${ROTATION.map((w) => `<option value="${w.id}" ${st.nextOverride === w.id ? "selected" : ""}>${esc(w.name)}</option>`).join("")}
+          ${ROTATION.map((w) => `<option value="${w.id}" ${next.id === w.id ? "selected" : ""}>Next: ${esc(w.name)}</option>`).join("")}
         </select></label>
+      <p class="muted small">Pick the next workout. The rotation continues in order from there.</p>
     </div>
 
     <h2>Your data</h2>
@@ -55,7 +55,11 @@ export function renderSettings(view) {
       st.restSeconds = n;
     }
     if (t.id === "sounds") st.sounds = t.checked;
-    if (t.id === "next") st.nextOverride = t.value || null;
+    if (t.id === "next") {
+      // Only store a position when it differs from where your history already puts you.
+      const fromHistory = nextWorkout(state.sessions, { ...st, nextOverride: null });
+      st.nextOverride = t.value === fromHistory.id ? null : t.value;
+    }
     if (t.id === "units") {
       const to = t.value;
       if (!confirm(`Switch to ${to === "kg" ? "kilograms" : "pounds"}? All saved weights will be converted.`)) { t.value = st.units; return; }

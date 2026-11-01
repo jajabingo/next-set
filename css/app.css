@@ -33,8 +33,12 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; }
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
+/* App shell: the page itself never scrolls (so iOS can't drag the nav bar around);
+   only #view scrolls, and the nav bar sits below it at the bottom of the screen. */
 body {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
   background: var(--bg);
   color: var(--fg);
   font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -45,14 +49,17 @@ button, input, textarea, select { font: inherit; color: inherit; }
 button { touch-action: manipulation; cursor: pointer; }
 
 #view {
-  max-width: 560px;
-  margin: 0 auto;
-  padding: calc(env(safe-area-inset-top) + 16px) 16px calc(var(--nav-h) + env(safe-area-inset-bottom) + 24px);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: calc(env(safe-area-inset-top) + 16px) max(16px, calc((100% - 528px) / 2)) 24px;
 }
 
 /* Bottom navigation */
 #nav {
-  position: fixed; left: 0; right: 0; bottom: 0;
+  flex-shrink: 0;
   display: flex;
   background: var(--surface);
   border-top: 1px solid var(--line);

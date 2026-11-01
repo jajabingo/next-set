@@ -259,13 +259,19 @@ function coreSave(view, a) {
       <div class="ro"><span>Work intervals</span><b>${a.intervalsDone} of ${CORE_INTERVALS}</b></div>
     </div>
     <label class="field"><span>Notes</span><textarea id="notes" placeholder="Optional">${esc(a.notes)}</textarea></label>
-    <button class="btn btn-primary" data-act="save">Save</button>`;
+    <button class="btn btn-primary" data-act="save">Save</button>
+    <button class="btn btn-danger" data-act="discard">Discard</button>`;
 
   view.oninput = (e) => {
     if (e.target.id === "notes") { a.notes = e.target.value; saveActive(); }
   };
   view.onclick = async (e) => {
-    if (e.target.closest("[data-act]")?.dataset.act !== "save") return;
+    const act = e.target.closest("[data-act]")?.dataset.act;
+    if (act === "discard" && confirm("Discard this core workout? It will not be saved.")) {
+      await endSession();
+      return;
+    }
+    if (act !== "save") return;
     await saveSession({
       id: uid(),
       type: "core",
