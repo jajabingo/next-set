@@ -76,9 +76,19 @@ function renderDetail(view, id) {
       <div class="stack">${textareaField({ id: "notes", label: "Notes", value: s.notes })}</div>
       <div class="end-actions">${btn("Delete workout", "delete", { kind: "danger" })}</div>
     </div>
-    <div class="actionbar" id="save-bar" hidden>${btn("Save changes", "save", { kind: "primary", xl: true })}</div>`;
+    <div class="actionbar inline" id="save-bar" hidden>
+      ${btn("Cancel", "cancel", { xl: true })}${btn("Save changes", "save", { kind: "primary", xl: true })}
+    </div>`;
 
-  // Save changes appears only after a field is edited.
+  // Redraw this page in place (after Save or Cancel), keeping the scroll position.
+  const redraw = () => {
+    document.activeElement?.blur(); // lowers the keyboard
+    const top = view.querySelector(".scroll").scrollTop;
+    renderDetail(view, id);
+    view.querySelector(".scroll").scrollTop = top;
+  };
+
+  // Save changes and Cancel appear only after a field is edited.
   view.oninput = view.onchange = (e) => {
     if (e.target.type === "date") syncDate(e.target);
     view.querySelector("#save-bar").hidden = false;
@@ -87,6 +97,7 @@ function renderDetail(view, id) {
   view.onclick = async (e) => {
     const act = e.target.closest("[data-act]")?.dataset.act;
     if (act === "back") navigate("list", null, null, "back");
+    if (act === "cancel") redraw();
     if (act === "delete") {
       const ok = await sheet({
         title: "Delete this workout?",
@@ -115,7 +126,7 @@ function renderDetail(view, id) {
         view.querySelectorAll("[data-ex]").forEach((inp) => { updated.weights[inp.dataset.ex] = parseWeight(inp.value); });
       }
       await saveSession(updated);
-      navigate("list", null, null, "back");
+      redraw();
       toast("Changes saved");
     }
   };

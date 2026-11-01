@@ -1,6 +1,6 @@
 // Serves the app from the phone's cache so it works with no connection.
-// This file should never need to change: updates are pulled in from the app's Settings
-// ("Check for updates"), not by the browser.
+// App files are only replaced from the app's Settings ("Check for updates"), never by the
+// browser on its own.
 const CACHE = "next-set-app";
 
 self.addEventListener("install", (event) => {
@@ -18,8 +18,9 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") return;
-  event.respondWith(
-    caches.match(event.request, { ignoreSearch: true }).then((hit) => hit || fetch(event.request))
-  );
+  const req = event.request;
+  if (req.method !== "GET") return;
+  // "Check for updates" asks for fresh copies; those must come from the network, not this cache.
+  if (req.cache === "no-store" || req.cache === "reload") return;
+  event.respondWith(caches.match(req, { ignoreSearch: true }).then((hit) => hit || fetch(req)));
 });

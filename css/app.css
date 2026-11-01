@@ -59,6 +59,9 @@ p { margin: 0; }
 .tabpage { padding-top: env(safe-area-inset-top); }
 .actionbar { flex: none; padding: 16px var(--gutter) 20px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
 .actionbar.full { padding-left: 0; padding-right: 0; }
+.actionbar.inline { flex-direction: row; }
+.actionbar.inline .btn:first-child { flex: 1; }
+.actionbar.inline .btn:last-child { flex: 2; }
 .actionbar.full > .btn { margin: 0 var(--gutter); width: auto; }
 .pad { padding: 0 var(--gutter); }
 .stack { padding-top: 4px; display: flex; flex-direction: column; gap: 20px; }
@@ -89,12 +92,20 @@ svg.i.filled { fill: currentColor; }
 .header-bar { height: 44px; display: flex; align-items: center; justify-content: space-between; }
 .header h1 { margin: 0; font-size: 34px; line-height: 40px; font-weight: 700; letter-spacing: -0.4px; }
 .header-bar .badge-wrap { margin-left: auto; }
+.back-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; margin-left: -11px; padding: 0;
+  border: 0; background: none; color: var(--ink);
+}
+.back-btn svg { stroke-width: 2.5; margin-left: -1px; }
+.back-btn:active .badge { background: var(--line); }
 
 /* Workout name row on tab pages */
 .title-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; padding: 24px var(--gutter) 0; }
 .title-row.card-row { padding-top: 0; padding-bottom: 8px; }
 .wname { flex: 1; min-width: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: -0.3px; }
-.icon-group { flex: none; display: flex; align-items: center; gap: 12px; }
+.icon-group { flex: none; display: flex; align-items: center; gap: 12px; height: 44px; }
+.ibtn-space { flex: none; width: 44px; height: 44px; }
 
 /* Section label */
 .section {

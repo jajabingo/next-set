@@ -1,8 +1,9 @@
 // Offline support and manual updates (PRD 12).
 //
-// The service worker serves the app from a cache on the phone. sw.js itself never changes,
-// so nothing updates on its own: new app files are only downloaded when you tap
-// "Check for updates", which is the app's only network request.
+// The service worker serves the app from a cache on the phone, so nothing updates on its
+// own: new app files are only downloaded when you tap "Check for updates", which is the
+// app's only network request. Its fetches use no-store / reload, which sw.js passes
+// straight to the network instead of answering from the cache.
 import { APP_VERSION } from "./version.js";
 
 export const CACHE = "next-set-app";

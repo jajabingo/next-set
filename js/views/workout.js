@@ -26,7 +26,7 @@ export function renderWorkout(view, route) {
       <div class="scroll tabpage">
         ${section(core ? "Any time" : "Next up")}
         <div class="title-row card-row"><p class="wname">${core ? "Core" : esc(w.name)}</p>
-          <div class="icon-group">${ibtn("skip", `Skip ${w.name}`, "skip", { hidden: core })}</div></div>
+          <div class="icon-group">${core ? `<span class="ibtn-space" aria-hidden="true"></span>` : ibtn("skip", `Skip ${w.name}`, "skip")}</div></div>
         ${core ? coreHtml() : planHtml(w, weights)}
       </div>
       <div class="actionbar full">
