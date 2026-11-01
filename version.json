@@ -1,0 +1,29 @@
+{
+  "version": "1.0.0",
+  "files": [
+    "./",
+    "index.html",
+    "manifest.json",
+    "css/app.css",
+    "icons/icon-180.png",
+    "icons/icon-192.png",
+    "icons/icon-512.png",
+    "js/app.js",
+    "js/engine.js",
+    "js/export.js",
+    "js/plan.js",
+    "js/rotation.js",
+    "js/router.js",
+    "js/session.js",
+    "js/sound.js",
+    "js/store.js",
+    "js/update.js",
+    "js/util.js",
+    "js/version.js",
+    "js/wake.js",
+    "js/views/list.js",
+    "js/views/live.js",
+    "js/views/settings.js",
+    "js/views/workout.js"
+  ]
+}
