@@ -1,12 +1,14 @@
-// Workout tab: the next planned workout, the Skip form, and starting sessions (PRD 7.2, 7.6).
+// Workout tab: the next planned workout or the core workout, the Skip form, and starting
+// sessions (PRD 7.2, 7.6).
 import { state, saveActive, saveSession, saveSettings } from "../store.js";
-import { setsOf } from "../plan.js";
+import { setsOf, followingWorkout, CORE } from "../plan.js";
 import { nextWorkout, lastCompletedWeights } from "../rotation.js";
 import { newPlanned, newCore } from "../session.js";
 import { unlockAudio } from "../sound.js";
 import * as wake from "../wake.js";
 import { navigate } from "../router.js";
 import { esc, uid, toISODate, fmtWeight } from "../util.js";
+import { header, section, row, btn, ibtn, segField, dateField, syncDate, textareaField, alertSheet, toast } from "../ui.js";
 import { renderLive } from "./live.js";
 
 export function renderWorkout(view, route) {
@@ -15,35 +17,50 @@ export function renderWorkout(view, route) {
 
   const w = nextWorkout(state.sessions, state.settings);
   const weights = lastCompletedWeights(state.sessions, w.id);
-  view.innerHTML = `
-    <div class="eyebrow">Next up</div>
-    <h1>${esc(w.name)}</h1>
-    <div class="card">${planHtml(w, weights)}</div>
-    <button class="btn btn-primary btn-xl" data-act="start">Start</button>
-    <div class="btn-row">
-      <button class="btn" data-act="skip">Skip</button>
-      <button class="btn" data-act="core">Core Workout</button>
-    </div>`;
+  let mode = "next"; // the switch returns to Next up each time the page opens
+
+  function draw() {
+    const core = mode === "core";
+    view.innerHTML = `
+      <div class="scroll tabpage">
+        <div class="title-row"><p class="wname">${core ? "Core" : esc(w.name)}</p>
+          ${core ? "" : `<div class="icon-group">${ibtn("skip", `Skip ${w.name}`, "skip")}</div>`}</div>
+        ${core ? coreHtml() : planHtml(w, weights)}
+      </div>
+      <div class="actionbar full">
+        ${btn(core ? "Start core workout" : `Start ${w.name}`, "start", { kind: "primary", xl: true })}
+        ${segField({ id: "mode", label: "Workout type", hideLabel: true, value: mode,
+          options: [{ value: "next", text: "Next up" }, { value: "core", text: "Core" }] })}
+      </div>`;
+  }
+
   view.onclick = (e) => {
-    const act = e.target.closest("[data-act]")?.dataset.act;
-    if (act === "start") startPlanned(w);
-    if (act === "skip") navigate("workout", "skip", w.id);
-    if (act === "core") startCore();
+    const el = e.target.closest("[data-act]");
+    const act = el?.dataset.act;
+    if (act === "seg") { mode = el.dataset.value; draw(); }
+    if (act === "start") mode === "core" ? startCore() : startPlanned(w);
+    if (act === "skip") navigate("workout", "skip");
   };
+  draw();
 }
 
-// The workout's exercises grouped by block, with sets × reps and last weights.
+// The workout's blocks with sets × reps and the weights from the last Completed session.
 export function planHtml(w, weights) {
-  return w.blocks.map((b) => {
-    const head = b.items.length > 1 ? `Superset · ${b.sets} sets` : `${b.sets} sets`;
+  const many = w.blocks.length > 1;
+  return w.blocks.map((b, i) => {
+    const superset = b.items.length > 1 ? "Superset · " : "";
+    const label = many ? `Block ${i + 1} · ${superset}${b.sets} sets` : `${superset}${b.sets} sets`;
     const rows = b.items.map((it) => {
       const ex = w.exercises[it.ex];
-      return `<div class="ex-row"><span class="ex-name">${esc(ex.name)}</span>
-        <span class="ex-meta">${b.sets} × ${it.reps}</span>
-        <span class="ex-meta">${fmtWeight(weights[ex.id], state.settings.units)}</span></div>`;
+      return row({ title: ex.name, sub: `${b.sets} sets × ${it.reps} reps`, trail: fmtWeight(weights[ex.id], state.settings.units) });
     }).join("");
-    return `<div class="block-head">${head}</div>${rows}`;
+    return section(label, { aside: i === 0 ? "Last time" : "", divider: true }) + rows;
   }).join("");
+}
+
+function coreHtml() {
+  return section(`${CORE.rounds} rounds each`, { aside: `${CORE.work} s work · ${CORE.rest} s rest`, divider: true })
+    + CORE.exercises.map((name) => row({ title: name })).join("");
 }
 
 export function startPlanned(w) {
@@ -62,22 +79,29 @@ export function startCore() {
   navigate("workout");
 }
 
-// Skip form, reachable from the Workout and List tabs.
+// Skip form, reachable from the Workout and List tabs. A skip always moves the rotation on.
 export function renderSkip(view, backTab) {
   const w = nextWorkout(state.sessions, state.settings);
   view.innerHTML = `
-    <button class="link" data-act="cancel">‹ Cancel</button>
-    <div class="eyebrow">Skip workout</div>
-    <h1>${esc(w.name)}</h1>
-    <label class="field"><span>Date</span><input type="date" id="skip-date" value="${toISODate()}"></label>
-    <label class="field"><span>Notes</span><textarea id="skip-notes" placeholder="Optional"></textarea></label>
-    <button class="btn btn-primary" data-act="save">Save as skipped</button>`;
+    ${header("Skip workout", { back: "Cancel" })}
+    <div class="scroll">
+      ${section("Workout", { divider: true })}
+      ${row({ title: w.name })}
+      ${section("Date")}
+      <div class="stack">${dateField({ id: "skip-date", label: "Date", value: toISODate(),
+        helper: `Defaults to today. The rotation moves on to ${followingWorkout(w.id).name}.` })}</div>
+      ${section("Notes", { aside: "Optional" })}
+      <div class="stack">${textareaField({ id: "skip-notes", label: "Notes" })}</div>
+    </div>
+    <div class="actionbar">${btn("Save as skipped", "save", { kind: "primary", xl: true })}</div>`;
+
+  view.onchange = (e) => { if (e.target.id === "skip-date") syncDate(e.target); };
   view.onclick = async (e) => {
     const act = e.target.closest("[data-act]")?.dataset.act;
-    if (act === "cancel") navigate(backTab);
+    if (act === "back") navigate(backTab);
     if (act === "save") {
       const date = view.querySelector("#skip-date").value;
-      if (!date) { alert("Please choose a date."); return; }
+      if (!date) { alertSheet("Choose a date", "A skipped workout needs a date."); return; }
       await saveSession({
         id: uid(),
         type: "planned",
@@ -96,6 +120,7 @@ export function renderSkip(view, backTab) {
       state.settings.nextOverride = null;
       await saveSettings();
       navigate(backTab);
+      toast(`${w.name} skipped`);
     }
   };
 }

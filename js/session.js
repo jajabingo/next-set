@@ -81,7 +81,9 @@ export function finish(a, now) {
   a.saving = "finish";
 }
 
-export function backFromFinish(a) {
+// Back to the session from the save screen. After Finish the final set carries on;
+// after Stop the session was paused, so it stays paused.
+export function backToWorkout(a) {
   a.endedAt = null;
   a.saving = null;
 }

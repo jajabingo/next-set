@@ -6,9 +6,10 @@ export function byRecency(a, b) {
   return a.date === b.date ? b.saveOrder - a.saveOrder : a.date < b.date ? 1 : -1;
 }
 
+// The rotation follows save order, not dates, so a skip always moves it on.
 export function nextWorkout(sessions, settings) {
   if (settings.nextOverride && workoutById(settings.nextOverride)) return workoutById(settings.nextOverride);
-  const last = sessions.filter((s) => s.type === "planned").sort(byRecency)[0];
+  const last = sessions.filter((s) => s.type === "planned").sort((a, b) => b.saveOrder - a.saveOrder)[0];
   if (!last) return ROTATION[0];
   if (last.status === "stopped" && last.nextTime === "repeat") return workoutById(last.workoutId);
   return followingWorkout(last.workoutId);

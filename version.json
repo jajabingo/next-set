@@ -1,5 +1,5 @@
 {
-  "version": "1.0.1",
+  "version": "1.1.0",
   "files": [
     "./",
     "index.html",
@@ -17,6 +17,7 @@
     "js/session.js",
     "js/sound.js",
     "js/store.js",
+    "js/ui.js",
     "js/update.js",
     "js/util.js",
     "js/version.js",

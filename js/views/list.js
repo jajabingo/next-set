@@ -3,38 +3,34 @@ import { state, saveSession, deleteSession } from "../store.js";
 import { workoutById } from "../plan.js";
 import { nextWorkout, byRecency } from "../rotation.js";
 import { navigate } from "../router.js";
-import { esc, fmtDate, fmtElapsed, parseWeight, toast } from "../util.js";
+import { esc, fmtDate, fmtElapsed, parseWeight } from "../util.js";
+import { header, section, row, btn, ibtn, inputField, dateField, syncDate, textareaField, sheet, alertSheet, toast } from "../ui.js";
 import { startPlanned, renderSkip } from "./workout.js";
-
-const STATUS = { completed: "Completed", stopped: "Stopped", skipped: "Skipped" };
 
 export function renderList(view, route) {
   if (route.sub === "detail") return renderDetail(view, route.param);
   if (route.sub === "skip") return renderSkip(view, "list");
 
   const w = nextWorkout(state.sessions, state.settings);
-  const top = state.active
-    ? `<div class="card"><div class="eyebrow">In progress</div>
-         <div class="row-title">${esc(state.active.kind === "core" ? "Core" : workoutById(state.active.workoutId).name)}</div>
-         <button class="btn btn-primary" data-act="goto">Go to workout</button></div>`
-    : `<div class="card"><div class="eyebrow">Next up</div>
-         <div class="row-title">${esc(w.name)}</div>
-         <div class="btn-row"><button class="btn btn-primary" data-act="start">Start</button>
-         <button class="btn" data-act="skip">Skip</button></div></div>`;
+  const a = state.active;
+  const activeName = a && (a.kind === "core" ? "Core" : workoutById(a.workoutId).name);
+  const top = a
+    ? `${section("In progress")}
+       <div class="title-row card-row"><p class="wname">${esc(activeName)}</p>
+         <div class="icon-group">${ibtn("go", "Go to workout", "goto", { kind: "filled" })}</div></div>`
+    : `${section("Next up")}
+       <div class="title-row card-row"><p class="wname">${esc(w.name)}</p>
+         <div class="icon-group">${ibtn("skip", `Skip ${w.name}`, "skip")}${ibtn("play", `Start ${w.name}`, "start", { kind: "filled" })}</div></div>`;
 
-  const sessions = [...state.sessions].sort(byRecency);
-  const rows = sessions.map((s) => `
-    <button class="row" data-id="${s.id}">
-      <div class="row-main">
-        <div class="row-title">${esc(s.name)}</div>
-        <div class="row-sub">${fmtDate(s.date)}</div>
-        <span class="badge ${s.status}">${STATUS[s.status]}</span>
-      </div>
-      <div class="row-side">${s.elapsedMs != null ? fmtElapsed(s.elapsedMs) : ""}</div>
-    </button>`).join("");
+  const rows = [...state.sessions].sort(byRecency).map((s) => row({
+    title: s.name, sub: fmtDate(s.date), status: s.status, id: s.id,
+    trail: s.elapsedMs != null ? fmtElapsed(s.elapsedMs) : "",
+  })).join("");
 
-  view.innerHTML = `<h1>List</h1>${top}
-    ${rows || `<div class="empty">No workouts saved yet.</div>`}`;
+  view.innerHTML = `<div class="scroll tabpage">${top}
+    ${section("History", { divider: true })}
+    ${rows || `<div class="empty"><p>No workouts saved yet</p><p>Completed, stopped and skipped workouts appear here, newest first.</p></div>`}
+  </div>`;
 
   view.onclick = (e) => {
     const act = e.target.closest("[data-act]")?.dataset.act;
@@ -55,61 +51,72 @@ function renderDetail(view, id) {
 
   let body = "";
   if (skipped) {
-    body = `<label class="field"><span>Date</span><input type="date" id="date" value="${s.date}"></label>`;
+    body = `${section("Date")}
+      <div class="stack">${dateField({ id: "date", label: "Date", value: s.date })}</div>
+      ${section("Exercises", { divider: true })}
+      ${w.blocks.flatMap((b) => b.items.map((it) => row({ title: w.exercises[it.ex].name, sub: `${b.sets} sets × ${it.reps} reps` }))).join("")}`;
   } else {
-    body = `<div class="card">
-        <div class="ro"><span>Date</span><b>${fmtDate(s.date)}</b></div>
-        <div class="ro"><span>Elapsed</span><b>${fmtElapsed(s.elapsedMs)}</b></div>
-        ${s.status === "stopped" && s.nextTime ? `<div class="ro"><span>Next time</span><b>${s.nextTime === "repeat" ? "Repeat" : "Move on"}</b></div>` : ""}
-      </div>
-      <label class="field"><span>${s.type === "core" ? "Work intervals completed" : "Sets completed"} (of ${s.setsTotal})</span>
-        <input type="number" inputmode="numeric" min="0" max="${s.setsTotal}" step="1" id="sets" value="${s.setsCompleted ?? ""}"></label>`;
-    if (w) {
-      body += `<h2>Weights</h2><div class="card">
-        ${w.exercises.map((ex) => `<label class="weight-row"><span class="ex-name">${esc(ex.name)}</span>
-          <input type="number" inputmode="decimal" step="0.5" min="0" data-ex="${ex.id}" value="${s.weights[ex.id] ?? ""}">
-          <span class="unit">${units}</span></label>`).join("")}
-      </div>`;
-    }
-  }
-  if (skipped && w) {
-    body += `<div class="card">${w.exercises.map((ex) => `<div class="ex-row"><span class="ex-name">${esc(ex.name)}</span></div>`).join("")}</div>`;
+    body = `${section("Session", { divider: true })}
+      ${row({ title: "Date", trail: fmtDate(s.date) })}
+      ${row({ title: "Elapsed", trail: fmtElapsed(s.elapsedMs) })}
+      ${s.status === "stopped" && s.nextTime ? row({ title: "Next time", trail: s.nextTime === "repeat" ? "Repeat" : "Move on" }) : ""}
+      ${section("Results")}
+      <div class="stack">${inputField({ id: "sets", label: s.type === "core" ? "Work intervals" : "Sets completed",
+        value: s.setsCompleted ?? "", suffix: `of ${s.setsTotal}`, mode: "numeric" })}</div>
+      ${w ? `${section("Weights")}
+        <div class="stack">${w.exercises.map((ex) => inputField({ id: `w-${ex.id}`, label: ex.name,
+          value: s.weights[ex.id] ?? "", suffix: units, attrs: `data-ex="${ex.id}"` })).join("")}</div>` : ""}`;
   }
 
   view.innerHTML = `
-    <button class="link" data-act="back">‹ List</button>
-    <div class="eyebrow"><span class="badge ${s.status}">${STATUS[s.status]}</span></div>
-    <h1>${esc(s.name)}</h1>
-    ${body}
-    <label class="field"><span>Notes</span><textarea id="notes" placeholder="Optional">${esc(s.notes)}</textarea></label>
-    <button class="btn btn-primary" data-act="save">Save changes</button>
-    <button class="btn btn-danger" data-act="delete">Delete workout</button>`;
+    ${header(s.name, { back: "List", status: s.status })}
+    <div class="scroll">
+      ${body}
+      ${section("Notes", { aside: "Optional" })}
+      <div class="stack">${textareaField({ id: "notes", label: "Notes", value: s.notes })}</div>
+      <div class="end-actions">${btn("Delete workout", "delete", { kind: "danger" })}</div>
+    </div>
+    <div class="actionbar" id="save-bar" hidden>${btn("Save changes", "save", { kind: "primary", xl: true })}</div>`;
+
+  // Save changes appears only after a field is edited.
+  view.oninput = view.onchange = (e) => {
+    if (e.target.type === "date") syncDate(e.target);
+    view.querySelector("#save-bar").hidden = false;
+  };
 
   view.onclick = async (e) => {
     const act = e.target.closest("[data-act]")?.dataset.act;
     if (act === "back") navigate("list");
-    if (act === "delete" && confirm("Delete this workout? This can't be undone.")) {
+    if (act === "delete") {
+      const ok = await sheet({
+        title: "Delete this workout?",
+        body: s.type === "core" ? "It can't be recovered." : "It can't be recovered, and deleting it can change what's next in the rotation.",
+        keep: "Keep workout", confirm: "Delete workout",
+      });
+      if (!ok) return;
       await deleteSession(s.id);
       navigate("list");
+      toast("Workout deleted");
     }
     if (act === "save") {
       const updated = { ...s, weights: { ...s.weights }, notes: view.querySelector("#notes").value.trim() };
       if (skipped) {
         const date = view.querySelector("#date").value;
-        if (!date) { alert("Please choose a date."); return; }
+        if (!date) { alertSheet("Choose a date", "A skipped workout needs a date."); return; }
         updated.date = date;
       } else {
-        const sets = Number(view.querySelector("#sets").value);
-        if (!Number.isInteger(sets) || sets < 0 || sets > s.setsTotal) {
-          alert(`Sets completed must be a whole number from 0 to ${s.setsTotal}.`);
+        const raw = view.querySelector("#sets").value.trim();
+        const sets = Number(raw);
+        if (raw === "" || !Number.isInteger(sets) || sets < 0 || sets > s.setsTotal) {
+          alertSheet("Check the count", `${s.type === "core" ? "Work intervals" : "Sets completed"} must be a whole number from 0 to ${s.setsTotal}.`);
           return;
         }
         updated.setsCompleted = sets;
         view.querySelectorAll("[data-ex]").forEach((inp) => { updated.weights[inp.dataset.ex] = parseWeight(inp.value); });
       }
       await saveSession(updated);
-      toast("Saved");
       navigate("list");
+      toast("Changes saved");
     }
   };
 }

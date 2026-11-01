@@ -7,7 +7,8 @@ import { checkForUpdates } from "../update.js";
 import { APP_VERSION } from "../version.js";
 import * as wake from "../wake.js";
 import { render } from "../router.js";
-import { esc, toISODate, toast } from "../util.js";
+import { toISODate } from "../util.js";
+import { section, row, btn, inputField, selectField, segField, toggleField, sheet, alertSheet, toast } from "../ui.js";
 
 const LB_PER_KG = 2.20462262;
 const roundHalf = (n) => Math.round(n * 2) / 2;
@@ -17,89 +18,101 @@ export function renderSettings(view) {
   const next = nextWorkout(state.sessions, st);
 
   view.innerHTML = `
-    <h1>Settings</h1>
-
-    <h2>Workout</h2>
-    <div class="card">
-      <label class="field"><span>Rest between sets (seconds)</span>
-        <input type="number" inputmode="numeric" min="1" step="1" id="rest" value="${st.restSeconds}"></label>
-      <label class="field"><span>Units</span>
-        <select id="units">
-          <option value="lb" ${st.units === "lb" ? "selected" : ""}>Pounds (lb)</option>
-          <option value="kg" ${st.units === "kg" ? "selected" : ""}>Kilograms (kg)</option>
-        </select></label>
-      <label class="choice"><input type="checkbox" id="sounds" ${st.sounds ? "checked" : ""}> Sounds</label>
-      <label class="field"><span>Where you are in the rotation</span>
-        <select id="next">
-          ${ROTATION.map((w) => `<option value="${w.id}" ${next.id === w.id ? "selected" : ""}>Next: ${esc(w.name)}</option>`).join("")}
-        </select></label>
-      <p class="muted small">Pick the next workout. The rotation continues in order from there.</p>
-    </div>
-
-    <h2>Your data</h2>
-    <button class="btn" data-act="csv">Export CSV</button>
-    <button class="btn" data-act="backup">Back up data</button>
-    <button class="btn" data-act="restore">Restore from backup</button>
-    <input type="file" id="restore-file" accept=".json,application/json" hidden>
-
-    <h2>App</h2>
-    <button class="btn" data-act="update">Check for updates</button>
-    <p class="muted small" style="text-align:center">Version ${APP_VERSION}. Checking for updates is the only thing that uses the internet.</p>
-    <button class="btn btn-danger" data-act="erase">Erase all data</button>`;
+    <div class="scroll tabpage">
+      ${section("Workout")}
+      <div class="stack">
+        ${inputField({ id: "rest", label: "Rest between sets", value: st.restSeconds, suffix: "seconds", mode: "numeric" })}
+        ${segField({ id: "units", label: "Units", value: st.units, helper: "Switching converts every saved weight.",
+          options: [{ value: "lb", text: "Pounds" }, { value: "kg", text: "Kilograms" }] })}
+        ${toggleField({ id: "sounds", label: "Sounds", on: st.sounds })}
+        ${selectField({ id: "next", label: "Where you are in the rotation", value: next.id,
+          helper: "The rotation continues in order from the workout you choose.",
+          options: ROTATION.map((w) => ({ value: w.id, text: `Next: ${w.name}` })) })}
+      </div>
+      ${section("Your data", { divider: true })}
+      ${row({ title: "Export CSV", act: "csv" })}
+      ${row({ title: "Back up data", act: "backup" })}
+      ${row({ title: "Restore from backup", act: "restore" })}
+      <input type="file" id="restore-file" accept=".json,application/json" hidden>
+      ${section("App", { divider: true })}
+      ${row({ title: "Check for updates", trail: `v${APP_VERSION}`, act: "update" })}
+      <p class="note">Checking for updates is the only thing in Next Set that uses the internet. Everything else stays on this phone.</p>
+      <div class="end-actions">${btn("Erase all data", "erase", { kind: "danger" })}</div>
+    </div>`;
 
   view.onchange = async (e) => {
     const t = e.target;
     if (t.id === "rest") {
-      const n = Number(t.value);
-      if (!Number.isInteger(n) || n < 1) { alert("Rest must be a whole number of seconds."); t.value = st.restSeconds; return; }
+      const n = Number(t.value.trim());
+      if (!Number.isInteger(n) || n < 1) {
+        t.value = st.restSeconds;
+        alertSheet("Check the rest time", "Rest must be a whole number of seconds, 1 or more.");
+        return;
+      }
       st.restSeconds = n;
     }
-    if (t.id === "sounds") st.sounds = t.checked;
     if (t.id === "next") {
       // Only store a position when it differs from where your history already puts you.
       const fromHistory = nextWorkout(state.sessions, { ...st, nextOverride: null });
       st.nextOverride = t.value === fromHistory.id ? null : t.value;
     }
-    if (t.id === "units") {
-      const to = t.value;
-      if (!confirm(`Switch to ${to === "kg" ? "kilograms" : "pounds"}? All saved weights will be converted.`)) { t.value = st.units; return; }
-      await convertWeights(to);
-      st.units = to;
-    }
     await saveSettings();
-    toast("Saved");
   };
 
   view.onclick = async (e) => {
-    const act = e.target.closest("[data-act]")?.dataset.act;
+    const el = e.target.closest("[data-act]");
+    const act = el?.dataset.act;
+    if (act === "toggle" && el.id === "sounds") {
+      st.sounds = !st.sounds;
+      el.setAttribute("aria-checked", st.sounds);
+      await saveSettings();
+    }
+    if (act === "seg" && el.dataset.seg === "units" && el.dataset.value !== st.units) {
+      const to = el.dataset.value;
+      const name = to === "kg" ? "kilograms" : "pounds";
+      const ok = await sheet({ title: `Switch to ${name}?`, tone: "neutral", keep: "Cancel", confirm: `Switch to ${name}`,
+        body: `Every saved weight will be converted to ${name} and rounded to the nearest 0.5.` });
+      if (!ok) return;
+      await convertWeights(to);
+      st.units = to;
+      await saveSettings();
+      render();
+    }
     if (act === "csv") {
-      shareFile(`workouts-${toISODate()}.csv`, "text/csv", buildCSV(state.sessions, st.units)).catch((err) => alert(err.message));
+      shareFile(`workouts-${toISODate()}.csv`, "text/csv", buildCSV(state.sessions, st.units))
+        .catch((err) => alertSheet("Couldn't export", err.message));
     }
     if (act === "backup") {
-      shareFile(`next-set-backup-${toISODate()}.json`, "application/json", buildBackup(state.sessions, st)).catch((err) => alert(err.message));
+      shareFile(`next-set-backup-${toISODate()}.json`, "application/json", buildBackup(state.sessions, st))
+        .catch((err) => alertSheet("Couldn't back up", err.message));
     }
     if (act === "restore") view.querySelector("#restore-file").click();
     if (act === "update") {
-      const btn = e.target.closest("button");
-      btn.disabled = true;
-      btn.textContent = "Checking…";
+      const trail = el.querySelector(".row-trail");
+      el.disabled = true;
+      trail.textContent = "Checking…";
       try {
         const v = await checkForUpdates();
-        if (v) { alert(`Updated to version ${v}. The app will now reload.`); location.reload(); return; }
-        toast("You're on the latest version.");
+        if (v) {
+          await alertSheet(`Updated to version ${v}`, "Next Set will now reload to finish updating.");
+          location.reload();
+          return;
+        }
+        toast("You’re on the latest version", "info");
       } catch {
-        alert("Couldn't check for updates. Make sure you're connected to the internet and try again.");
+        alertSheet("Couldn't check for updates", "Make sure you're connected to the internet and try again.");
       }
-      btn.disabled = false;
-      btn.textContent = "Check for updates";
+      el.disabled = false;
+      trail.textContent = `v${APP_VERSION}`;
     }
     if (act === "erase") {
-      const typed = prompt('This deletes every saved workout and setting. Type ERASE to confirm.');
-      if (typed?.trim().toUpperCase() !== "ERASE") return;
+      const ok = await sheet({ title: "Erase all data?", prompt: "ERASE", keep: "Cancel", confirm: "Erase all data",
+        body: "Every saved workout and setting will be deleted from this phone. This can’t be undone." });
+      if (!ok) return;
       wake.release();
       await replaceAll([], {});
-      toast("All data erased");
       render();
+      toast("All data erased");
     }
   };
 
@@ -107,16 +120,20 @@ export function renderSettings(view) {
     const file = e.target.files[0];
     e.target.value = "";
     if (!file) return;
+    let data;
     try {
-      const data = parseBackup(await file.text());
-      if (!confirm(`Restore ${data.sessions.length} workouts from this backup? This replaces all current data.`)) return;
-      wake.release();
-      await replaceAll(data.sessions, data.settings || {});
-      toast("Backup restored");
-      render();
-    } catch (err) {
-      alert(err.message || "Couldn't read that file.");
+      data = parseBackup(await file.text());
+    } catch {
+      alertSheet("Couldn’t restore", "That file isn’t a Next Set backup. Nothing on this phone was changed.");
+      return;
     }
+    const ok = await sheet({ title: "Restore from backup?", keep: "Cancel", confirm: "Replace my data",
+      body: `All of your workouts and settings will be replaced by the ${data.sessions.length} workouts in the backup file. Back up first if you want to keep what’s here.` });
+    if (!ok) return;
+    wake.release();
+    await replaceAll(data.sessions, data.settings || {});
+    render();
+    toast("Backup restored");
   });
 }
 
