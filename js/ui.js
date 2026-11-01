@@ -39,9 +39,10 @@ export function badge(status, withLabel = false) {
   return withLabel ? `<span class="badge-wrap">${b}<span aria-hidden="true">${STATUS[status]}</span></span>` : b;
 }
 
+// `back` is the back button's spoken label; it shows as a chevron only.
 export function header(title, { back = "", status = "" } = {}) {
   return `<header class="header"><div class="header-bar">
-      ${back ? `<button class="back" data-act="back">${icon("back", 22)}<span>${esc(back)}</span></button>` : ""}
+      ${back ? ibtn("back", back, "back") : ""}
       ${status ? badge(status, true) : ""}
     </div><h1>${esc(title)}</h1></header>`;
 }
@@ -68,9 +69,11 @@ export function btn(label, act, { kind = "", xl = false, disabled = false } = {}
   return `<button class="${cls}" data-act="${act}" ${disabled ? "disabled" : ""}>${esc(label)}</button>`;
 }
 
-export function ibtn(name, label, act, { kind = "", lg = false, disabled = false } = {}) {
+// hidden: keeps its space but can't be seen or tapped, so layouts don't shift.
+export function ibtn(name, label, act, { kind = "", lg = false, disabled = false, hidden = false } = {}) {
   const cls = ["ibtn", kind, lg && "lg"].filter(Boolean).join(" ");
-  return `<button class="${cls}" data-act="${act}" aria-label="${esc(label)}" ${disabled ? "disabled" : ""}>${icon(name, lg ? 28 : 20)}</button>`;
+  const hide = hidden ? `style="visibility:hidden" aria-hidden="true" tabindex="-1"` : "";
+  return `<button class="${cls}" data-act="${act}" aria-label="${esc(label)}" ${disabled ? "disabled" : ""} ${hide}>${icon(name, lg ? 28 : 20)}</button>`;
 }
 
 const helperHtml = (h) => (h ? `<p class="helper">${esc(h)}</p>` : "");

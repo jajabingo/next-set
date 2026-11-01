@@ -48,7 +48,8 @@ button, input, textarea, select { font: inherit; color: inherit; }
 button { touch-action: manipulation; cursor: pointer; }
 p { margin: 0; }
 
-#view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#view { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
+.page-ghost { position: fixed; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); pointer-events: none; }
 .scroll {
   flex: 1; min-height: 0;
   overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
@@ -67,7 +68,8 @@ p { margin: 0; }
 #nav {
   flex: none;
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
-  padding: 10px var(--gutter) max(env(safe-area-inset-bottom), 10px);
+  /* --nav-bottom is set by app.js: the home-indicator space, unless iOS already keeps it clear. */
+  padding: 10px var(--gutter) var(--nav-bottom, max(env(safe-area-inset-bottom), 10px));
   background: var(--bg);
   border-top: 1px solid var(--line);
   z-index: 10;
@@ -85,10 +87,6 @@ svg.i.filled { fill: currentColor; }
 /* Sub-page header */
 .header { flex: none; padding: env(safe-area-inset-top) var(--gutter) 8px; }
 .header-bar { height: 44px; display: flex; align-items: center; justify-content: space-between; }
-.back {
-  display: inline-flex; align-items: center; gap: 2px; min-height: 44px; margin-left: -8px; padding: 0 8px;
-  border: 0; background: none; color: var(--ink); font-size: 17px; font-weight: 500;
-}
 .header h1 { margin: 0; font-size: 34px; line-height: 40px; font-weight: 700; letter-spacing: -0.4px; }
 .header-bar .badge-wrap { margin-left: auto; }
 

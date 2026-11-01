@@ -17,7 +17,7 @@ export function renderLive(view) {
   const a = state.active;
   wake.acquire();
   // The core workout may have reached its end while another tab was showing.
-  if (a.kind === "core" && !a.saving && S.coreSeconds(a, Date.now()) >= CORE_TOTAL) S.endCore(a);
+  if (a.kind === "core" && !a.ready && !a.saving && S.coreSeconds(a, Date.now()) >= CORE_TOTAL) S.endCore(a);
   if (a.kind === "planned") return a.saving ? plannedSave(view, a) : plannedRun(view, a);
   return a.saving ? coreSave(view, a) : coreRun(view, a);
 }
@@ -25,6 +25,8 @@ export function renderLive(view) {
 // Shared tap handling for both kinds of session.
 function handleTap(a, act, update) {
   const now = Date.now();
+  if (act === "leave") { endSession("workout", "back"); return; }
+  if (act === "begin") { unlockAudio(); S.begin(a, now); }
   if (act === "rest") S.tapRest(a, now);
   if (act === "skip") { S.skipRest(a, now); beep("go"); }
   if (act === "undo") S.undo(a, now);
@@ -64,7 +66,10 @@ function exBlock(label, items, deck = false) {
     `<div class="exrow"><span class="reps">${esc(it.reps)}</span><span>${esc(it.name)}</span></div>`).join("")}</div>`;
 }
 
-function controlsHtml({ paused, undoOff, advance, advAct, auto }) {
+function controlsHtml({ ready, paused, undoOff, advance, advAct, auto }) {
+  if (ready) {
+    return `<div class="controls">${ibtn("back", "Back", "leave", { lg: true })}${btn("Start", "begin", { kind: "primary", xl: true })}</div>`;
+  }
   const left = paused
     ? ibtn("stop", "Stop workout", "stop", { kind: "danger", lg: true }) + ibtn("play", "Resume", "resume", { kind: "filled", lg: true })
     : ibtn("undo", "Undo last rest", "undo", { lg: true, disabled: undoOff }) + ibtn("pause", "Pause", "pause", { lg: true });
@@ -119,6 +124,7 @@ function plannedRun(view, a) {
   let shownPct = (a.history.length / total) * 100;
 
   function draw(now) {
+    const ready = a.ready;
     const done = a.history.length;
     const paused = S.isPaused(a);
     const inRest = a.phase === "rest";
@@ -132,21 +138,21 @@ function plannedRun(view, a) {
 
     view.innerHTML = `<div class="live" style="display:contents">
       ${phaseHtml({
-        cls: paused ? "paused" : inRest ? "rest" : "set",
+        cls: ready ? "prep" : paused ? "paused" : inRest ? "rest" : "set",
         workout: w.name,
-        status: paused ? "PAUSED" : inRest ? "REST" : `SET ${done + 1}`,
+        status: ready ? "READY" : paused ? "PAUSED" : inRest ? "REST" : `SET ${done + 1}`,
         progress: inRest ? `Rest · ${done} of ${total} sets done` : `Set ${done + 1} of ${total}`,
         aside: s.blockLabel ? `${s.blockLabel} · ${s.setInBlock} of ${s.blockSets}` : isFinal && !inRest ? "Last set" : "",
         fromPct: shownPct, go, goIcon: go, paused,
       })}
       <div class="scroll">
-        ${exBlock(`${inRest ? "Next set" : "Now"} · Set ${done + 1}`, s.items.map((it) => ({ name: it.name, reps: reps(it) })))}
+        ${exBlock(`${ready ? "First up" : inRest ? "Next set" : "Now"} · Set ${done + 1}`, s.items.map((it) => ({ name: it.name, reps: reps(it) })))}
         ${next
           ? exBlock(`On deck · Set ${done + 2}`, next.items.map((it) => ({ name: it.name, reps: reps(it) })), true)
           : exBlock("On deck", [{ name: "Finish and save", reps: "" }], true)}
       </div>
       ${controlsHtml({
-        paused, undoOff: done === 0,
+        ready, paused, undoOff: done === 0,
         advance: inRest ? "Skip rest" : isFinal ? "Finish" : "Rest",
         advAct: inRest ? "skip" : isFinal ? "finish" : "rest",
       })}
@@ -156,8 +162,9 @@ function plannedRun(view, a) {
   }
 
   function update(now) {
-    const k = `${a.phase}|${a.history.length}|${S.isPaused(a)}`;
+    const k = `${a.ready}|${a.phase}|${a.history.length}|${S.isPaused(a)}`;
     if (k !== key) { key = k; draw(now); }
+    if (a.ready) { tick({ timerSec: 0, clockMs: 0, count: 0 }); return; }
     const el = S.virtual(a, now) - a.phaseStartV;
     const inRest = a.phase === "rest";
     const sec = inRest ? Math.ceil(Math.max(0, a.restMs - el) / 1000) : Math.floor(el / 1000);
@@ -263,10 +270,10 @@ function plannedSave(view, a) {
   };
 }
 
-async function endSession(tab) {
+async function endSession(tab, anim = "fade") {
   wake.release();
   await clearActive();
-  navigate(tab);
+  navigate(tab, null, null, anim);
 }
 
 // ---------- Core workout in progress ----------
@@ -290,12 +297,13 @@ function coreRun(view, a) {
     const phaseLen = p.phase === "prep" ? CORE.prep : p.phase === "work" ? CORE.work : CORE.rest;
     const go = !paused && p.phase !== "prep" && phaseLen - p.left < CUE_MS / 1000;
     const pct = (p.completedWork / CORE_INTERVALS) * 100;
+    const ready = a.ready;
 
     view.innerHTML = `<div class="live" style="display:contents">
       ${phaseHtml({
         cls: paused ? "paused" : p.phase === "prep" ? "prep" : p.phase === "rest" ? "rest" : "set",
         workout: "Core",
-        status: paused ? "PAUSED" : p.phase === "prep" ? "GET READY" : p.phase === "work" ? "WORK" : "REST",
+        status: ready ? "READY" : paused ? "PAUSED" : p.phase === "prep" ? "GET READY" : p.phase === "work" ? "WORK" : "REST",
         progress: `Round ${p.round} of ${CORE.rounds} · Exercise ${p.exIndex + 1} of ${ex.length}`,
         aside: "", fromPct: shownPct, go, goIcon: go && p.phase === "work", paused,
       })}
@@ -303,20 +311,20 @@ function coreRun(view, a) {
         ${exBlock(now.label, [{ name: ex[now.ex], ...work }])}
         ${exBlock("On deck", [{ name: deck ?? "Finish and save", reps: "" }], true)}
       </div>
-      ${controlsHtml({ paused, undoOff: true, advance: "Automatic", advAct: "none", auto: true })}
+      ${controlsHtml({ ready, paused, undoOff: true, advance: "Automatic", advAct: "none", auto: true })}
     </div>`;
     afterDraw(view, pct);
     shownPct = pct;
   }
 
   function update(now) {
-    const t = Math.min(S.coreSeconds(a, now), CORE_TOTAL);
+    const t = a.ready ? 0 : Math.min(S.coreSeconds(a, now), CORE_TOTAL);
     const p = corePositionAt(t);
     if (p.phase === "done") return; // the engine is about to show the save screen
-    const k = `${p.phase}|${p.k}|${S.isPaused(a)}`;
+    const k = `${a.ready}|${p.phase}|${p.k}|${S.isPaused(a)}`;
     if (k !== key) { key = k; draw(p); }
     const sec = Math.ceil(p.left);
-    tick({ timerSec: sec, clockMs: now - a.startedAt,
+    tick({ timerSec: sec, clockMs: a.ready ? 0 : now - a.startedAt,
       count: p.phase !== "work" && !S.isPaused(a) && sec >= 1 && sec <= 3 ? sec : 0 });
     view.querySelector("#aside").textContent = `${fmtClock(Math.ceil(CORE_TOTAL - t))} left`;
   }

@@ -28,7 +28,7 @@ function tick() {
   const gap = now - lastTick;
   lastTick = now;
   const a = state.active;
-  if (!a || a.saving) return;
+  if (!a || a.ready || a.saving) return;
 
   if (sessionKey !== a.startedAt) {
     sessionKey = a.startedAt;

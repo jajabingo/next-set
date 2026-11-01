@@ -6,9 +6,11 @@
 // real time and keeps running through pauses (PRD 8.1).
 import { CORE_TOTAL, corePositionAt } from "./plan.js";
 
+// New sessions open "ready": the screen shows, but nothing is timed until Start is tapped.
 export function newPlanned(workout, restMs, now) {
   return {
     kind: "planned",
+    ready: true,
     workoutId: workout.id,
     startedAt: now,
     pausedAt: null,
@@ -25,7 +27,14 @@ export function newPlanned(workout, restMs, now) {
 }
 
 export function newCore(now) {
-  return { kind: "core", startedAt: now, pausedAt: null, pausedTotal: 0, endedAt: null, saving: null, intervalsDone: 0, notes: "", lastSeen: now };
+  return { kind: "core", ready: true, startedAt: now, pausedAt: null, pausedTotal: 0, endedAt: null, saving: null, intervalsDone: 0, notes: "", lastSeen: now };
+}
+
+// Start tapped: the session clock and the first set (or core prep) begin now.
+export function begin(a, now) {
+  a.ready = false;
+  a.startedAt = now;
+  a.lastSeen = now;
 }
 
 export function virtual(a, now) {
@@ -111,7 +120,7 @@ export function endCore(a) {
 
 // Show the session paused at the moment the app was last open (PRD 8.1).
 export function recover(a, now) {
-  if (!a || a.saving || a.pausedAt != null) return;
+  if (!a || a.ready || a.saving || a.pausedAt != null) return;
   const t = Math.min(a.lastSeen ?? now, now);
   if (a.kind === "planned") {
     advance(a, t);

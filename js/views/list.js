@@ -15,7 +15,7 @@ export function renderList(view, route) {
   const a = state.active;
   const activeName = a && (a.kind === "core" ? "Core" : workoutById(a.workoutId).name);
   const top = a
-    ? `${section("In progress")}
+    ? `${section(a.ready ? "Ready to start" : "In progress")}
        <div class="title-row card-row"><p class="wname">${esc(activeName)}</p>
          <div class="icon-group">${ibtn("go", "Go to workout", "goto", { kind: "filled" })}</div></div>`
     : `${section("Next up")}
@@ -28,17 +28,17 @@ export function renderList(view, route) {
   })).join("");
 
   view.innerHTML = `<div class="scroll tabpage">${top}
-    ${section("History", { divider: true })}
+    ${section("Past workouts", { divider: true })}
     ${rows || `<div class="empty"><p>No workouts saved yet</p><p>Completed, stopped and skipped workouts appear here, newest first.</p></div>`}
   </div>`;
 
   view.onclick = (e) => {
     const act = e.target.closest("[data-act]")?.dataset.act;
     if (act === "start") startPlanned(w);
-    if (act === "skip") navigate("list", "skip");
-    if (act === "goto") navigate("workout");
+    if (act === "skip") navigate("list", "skip", null, "forward");
+    if (act === "goto") navigate("workout", null, null, "forward");
     const id = e.target.closest("[data-id]")?.dataset.id;
-    if (id) navigate("list", "detail", id);
+    if (id) navigate("list", "detail", id, "forward");
   };
 }
 
@@ -69,7 +69,7 @@ function renderDetail(view, id) {
   }
 
   view.innerHTML = `
-    ${header(s.name, { back: "List", status: s.status })}
+    ${header(s.name, { back: "Back to List", status: s.status })}
     <div class="scroll">
       ${body}
       ${section("Notes", { aside: "Optional" })}
@@ -86,7 +86,7 @@ function renderDetail(view, id) {
 
   view.onclick = async (e) => {
     const act = e.target.closest("[data-act]")?.dataset.act;
-    if (act === "back") navigate("list");
+    if (act === "back") navigate("list", null, null, "back");
     if (act === "delete") {
       const ok = await sheet({
         title: "Delete this workout?",
@@ -95,7 +95,7 @@ function renderDetail(view, id) {
       });
       if (!ok) return;
       await deleteSession(s.id);
-      navigate("list");
+      navigate("list", null, null, "back");
       toast("Workout deleted");
     }
     if (act === "save") {
@@ -115,7 +115,7 @@ function renderDetail(view, id) {
         view.querySelectorAll("[data-ex]").forEach((inp) => { updated.weights[inp.dataset.ex] = parseWeight(inp.value); });
       }
       await saveSession(updated);
-      navigate("list");
+      navigate("list", null, null, "back");
       toast("Changes saved");
     }
   };

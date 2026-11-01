@@ -21,10 +21,12 @@ export function renderWorkout(view, route) {
 
   function draw() {
     const core = mode === "core";
+    // Same label and title position in both modes; Skip keeps its space when hidden.
     view.innerHTML = `
       <div class="scroll tabpage">
-        <div class="title-row"><p class="wname">${core ? "Core" : esc(w.name)}</p>
-          ${core ? "" : `<div class="icon-group">${ibtn("skip", `Skip ${w.name}`, "skip")}</div>`}</div>
+        ${section(core ? "Any time" : "Next up")}
+        <div class="title-row card-row"><p class="wname">${core ? "Core" : esc(w.name)}</p>
+          <div class="icon-group">${ibtn("skip", `Skip ${w.name}`, "skip", { hidden: core })}</div></div>
         ${core ? coreHtml() : planHtml(w, weights)}
       </div>
       <div class="actionbar full">
@@ -39,7 +41,7 @@ export function renderWorkout(view, route) {
     const act = el?.dataset.act;
     if (act === "seg") { mode = el.dataset.value; draw(); }
     if (act === "start") mode === "core" ? startCore() : startPlanned(w);
-    if (act === "skip") navigate("workout", "skip");
+    if (act === "skip") navigate("workout", "skip", null, "forward");
   };
   draw();
 }
@@ -68,7 +70,7 @@ export function startPlanned(w) {
   wake.acquire();
   state.active = newPlanned(w, state.settings.restSeconds * 1000, Date.now());
   saveActive();
-  navigate("workout");
+  navigate("workout", null, null, "forward");
 }
 
 export function startCore() {
@@ -76,7 +78,7 @@ export function startCore() {
   wake.acquire();
   state.active = newCore(Date.now());
   saveActive();
-  navigate("workout");
+  navigate("workout", null, null, "forward");
 }
 
 // Skip form, reachable from the Workout and List tabs. A skip always moves the rotation on.
@@ -98,7 +100,7 @@ export function renderSkip(view, backTab) {
   view.onchange = (e) => { if (e.target.id === "skip-date") syncDate(e.target); };
   view.onclick = async (e) => {
     const act = e.target.closest("[data-act]")?.dataset.act;
-    if (act === "back") navigate(backTab);
+    if (act === "back") navigate(backTab, null, null, "back");
     if (act === "save") {
       const date = view.querySelector("#skip-date").value;
       if (!date) { alertSheet("Choose a date", "A skipped workout needs a date."); return; }
@@ -119,7 +121,7 @@ export function renderSkip(view, backTab) {
       });
       state.settings.nextOverride = null;
       await saveSettings();
-      navigate(backTab);
+      navigate(backTab, null, null, "back");
       toast(`${w.name} skipped`);
     }
   };
