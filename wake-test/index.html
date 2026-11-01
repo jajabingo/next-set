@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Wake Test">
+<link rel="manifest" href="manifest.json">
+<title>Wake Test</title>
+<style>
+  :root {
+    --bg: #111; --fg: #f2f2f2; --muted: #999;
+    --work: #2ecc71; --rest: #3498db; --prep: #f1c40f; --bad: #e74c3c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.4 -apple-system, system-ui, sans-serif;
+    padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+  }
+  h1 { font-size: 20px; margin: 16px 0 8px; }
+  .checks { font-size: 14px; color: var(--muted); }
+  .checks b { color: var(--fg); }
+  .ok { color: var(--work); }
+  .no { color: var(--bad); }
+  #phase {
+    margin: 16px 0 0; padding: 24px 0; text-align: center; border-radius: 16px;
+    font-size: 40px; font-weight: 800; letter-spacing: 2px; background: #222;
+  }
+  #phase.work { background: var(--work); color: #000; }
+  #phase.rest { background: var(--rest); color: #000; }
+  #phase.prep { background: var(--prep); color: #000; }
+  #clock { text-align: center; font-size: 96px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #total { text-align: center; color: var(--muted); }
+  button {
+    display: block; width: 100%; margin: 16px 0; padding: 18px;
+    font-size: 20px; font-weight: 700; border: 0; border-radius: 14px;
+    background: var(--fg); color: #000;
+  }
+  #log {
+    font: 12px/1.5 ui-monospace, Menlo, monospace; color: var(--muted);
+    background: #1a1a1a; border-radius: 10px; padding: 10px; max-height: 40vh; overflow: auto;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+  <h1>iPhone wake &amp; sound test</h1>
+  <div class="checks" id="checks"></div>
+
+  <div id="phase">READY</div>
+  <div id="clock">3:10</div>
+  <div id="total">Runs 3 min 10 s: 10 s prep, then 6 × (20 s work / 10 s rest)</div>
+
+  <button id="btn">Start test</button>
+
+  <div id="log"></div>
+
+<script>
+// Sequence mirrors the core workout's timing, shortened to 6 rounds.
+const PREP = 10, WORK = 20, REST = 10, ROUNDS = 6;
+const TOTAL = PREP + ROUNDS * (WORK + REST);
+
+const $ = (id) => document.getElementById(id);
+const logLines = [];
+let startMs = 0, running = false, wakeLock = null, ctx = null, lastSecond = -1, timer = null;
+
+function log(msg) {
+  const t = running ? ((Date.now() - startMs) / 1000).toFixed(1).padStart(6) + "s " : "        ";
+  logLines.unshift(t + msg);
+  $("log").textContent = logLines.join("\n");
+}
+
+function fmt(s) {
+  s = Math.max(0, Math.ceil(s));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+function showChecks() {
+  const yes = (v) => v ? '<b class="ok">yes</b>' : '<b class="no">no</b>';
+  const iosMatch = navigator.userAgent.match(/OS (\d+)_(\d+)/);
+  $("checks").innerHTML = [
+    "Opened from Home Screen: " + yes(navigator.standalone === true || matchMedia("(display-mode: standalone)").matches),
+    "Secure connection (https): " + yes(window.isSecureContext),
+    "Keep-awake supported: " + yes("wakeLock" in navigator),
+    "Mix-with-music mode supported: " + yes("audioSession" in navigator),
+    "iOS version: <b>" + (iosMatch ? iosMatch[1] + "." + iosMatch[2] : "unknown") + "</b>",
+  ].join("<br>");
+}
+
+// Short beeps generated in-app; no sound files.
+function beep(freq, dur, label) {
+  if (!ctx) return;
+  const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.6, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(ctx.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+  log("beep: " + label);
+}
+const tick  = () => beep(880, 0.12, "3-2-1");
+const go    = () => beep(1320, 0.45, "GO (work starts)");
+const restT = () => beep(440, 0.45, "REST starts");
+
+async function requestWake() {
+  if (!("wakeLock" in navigator)) { log("keep-awake NOT supported"); return; }
+  try {
+    wakeLock = await navigator.wakeLock.request("screen");
+    log("keep-awake ON");
+    wakeLock.addEventListener("release", () => log("keep-awake released"));
+  } catch (e) { log("keep-awake FAILED: " + e.message); }
+}
+
+// Where are we in the sequence at elapsed second s?
+function phaseAt(s) {
+  if (s < PREP) return { name: "prep", left: PREP - s, label: "GET READY" };
+  const r = s - PREP, cycle = WORK + REST, round = Math.floor(r / cycle) + 1, inCycle = r % cycle;
+  if (round > ROUNDS) return { name: "done", left: 0, label: "DONE" };
+  if (inCycle < WORK) return { name: "work", left: WORK - inCycle, label: "WORK " + round + "/" + ROUNDS };
+  return { name: "rest", left: cycle - inCycle, label: "REST " + round + "/" + ROUNDS };
+}
+
+function update() {
+  const s = (Date.now() - startMs) / 1000;
+  const p = phaseAt(s);
+  $("phase").className = p.name;
+  $("phase").textContent = p.label;
+  $("clock").textContent = fmt(p.left);
+  $("total").textContent = "Total left " + fmt(TOTAL - s);
+
+  // Fire sounds once per whole second crossed. Clock-based, so a late tick still lands on the right second.
+  const whole = Math.floor(s);
+  if (whole !== lastSecond) {
+    if (whole - lastSecond > 1 && lastSecond >= 0) log("GAP: missed " + (whole - lastSecond - 1) + " s (page was paused)");
+    lastSecond = whole;
+    const left = Math.ceil(p.left - 0.001);
+    const startOfPhase = Math.abs(p.left - (p.name === "work" ? WORK : p.name === "rest" ? REST : PREP)) < 1;
+    if (p.name === "work" && startOfPhase) go();
+    else if (p.name === "rest" && startOfPhase && whole >= PREP + WORK) restT();
+    else if ((p.name === "prep" || p.name === "rest") && left >= 1 && left <= 3) tick();
+  }
+  if (p.name === "done") finish();
+}
+
+async function start() {
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if ("audioSession" in navigator) {
+    try { navigator.audioSession.type = "ambient"; log("mix-with-music mode ON"); }
+    catch (e) { log("mix-with-music mode FAILED: " + e.message); }
+  }
+  await ctx.resume();
+  await requestWake();
+  startMs = Date.now(); lastSecond = -1; running = true;
+  $("btn").textContent = "Stop test";
+  log("test started — now leave the phone alone");
+  timer = setInterval(update, 100);
+  update();
+}
+
+function finish() {
+  clearInterval(timer); running = false;
+  if (wakeLock) { wakeLock.release(); wakeLock = null; }
+  $("btn").textContent = "Run again";
+  log("test finished");
+}
+
+$("btn").addEventListener("click", () => running ? finish() : start());
+
+document.addEventListener("visibilitychange", () => {
+  log("page " + (document.hidden ? "HIDDEN (locked or switched apps)" : "visible again"));
+  if (!document.hidden && running) requestWake();
+});
+
+showChecks();
+</script>
+</body>
+</html>
